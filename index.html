@@ -189,6 +189,12 @@
     <h2>Inscrição confirmada!</h2>
     <p>Obrigado por se inscrever na Caminhada ao Monte Aparecida. Nos vemos no percurso!</p>
   </div>
+
+  <div class="ok" id="esgotado" style="display:none">
+    <div class="icon" style="background:#c0392b;border-color:var(--dourado)">&#33;</div>
+    <h2>Inscrições encerradas</h2>
+    <p>As 500 vagas para a Caminhada ao Monte Aparecida já foram preenchidas. Agradecemos o seu interesse!</p>
+  </div>
 </div>
 <footer>&copy; Prefeitura Municipal de Serra Redonda &middot; Secretaria de Meio Ambiente</footer>
 
@@ -308,6 +314,21 @@
   nascLive.addEventListener("change",checarIdade);
   nascLive.addEventListener("input",checarIdade);
 
+  function mostrarEsgotado(){
+    var f=document.getElementById("form"); if(f) f.style.display="none";
+    var o=document.getElementById("ok"); if(o) o.style.display="none";
+    document.getElementById("esgotado").style.display="block";
+    window.scrollTo({top:0,behavior:"smooth"});
+  }
+  // Ao abrir a página, verifica se ainda há vagas
+  (async function checarVagas(){
+    try{
+      var r=await fetch(SCRIPT_URL+"?status=1");
+      var d=await r.json();
+      if(d && d.lotado) mostrarEsgotado();
+    }catch(_){}
+  })();
+
   const form=document.getElementById("form");
   form.addEventListener("submit", async (e)=>{
     e.preventDefault();
@@ -351,6 +372,7 @@
     try{
       const resp=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(dados)});
       const json=await resp.json();
+      if(json.resultado==="lotado"){ mostrarEsgotado(); return; }
       if(json.resultado==="duplicado"){
         mostrarErro("cpf",true,"Este CPF já está inscrito. Só é permitida uma inscrição por CPF.");
         document.getElementById("cpf").scrollIntoView({behavior:"smooth",block:"center"});

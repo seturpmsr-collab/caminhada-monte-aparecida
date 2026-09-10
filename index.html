@@ -5,14 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Inscrição - Caminhada ao Monte Aparecida | Prefeitura de Serra Redonda</title>
 <style>
-  :root{
-    --azul:#0E6DB7;--azul-esc:#0a548c;--azul-claro:#e7f1fa;
-    --dourado:#c9a227;--cinza:#5b6670;--erro:#c0392b;--borda:#d0d7dd;
-  }
+  :root{--azul:#0E6DB7;--azul-esc:#0a548c;--azul-claro:#e7f1fa;--dourado:#c9a227;--cinza:#5b6670;--erro:#c0392b;--borda:#d0d7dd;}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#eef3f7;color:#222;line-height:1.5;padding:16px}
   .wrap{max-width:640px;margin:0 auto;border-radius:14px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.10);background:#fff}
-  .hero{line-height:0;position:relative}
+  .hero{line-height:0}
   .hero img{width:100%;height:auto;display:block}
   .hero::after{content:"";display:block;height:4px;background:var(--dourado)}
   form{background:#fff;padding:24px}
@@ -72,6 +69,7 @@
         <div class="field">
           <label for="cpf">CPF <span class="req">*</span></label>
           <input type="text" id="cpf" name="cpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required>
+          <div class="hint loading" id="cpf-hint" style="display:none">Verificando CPF...</div>
           <div class="err-msg" id="err-cpf">CPF inválido. Confira os números.</div>
         </div>
         <div class="field">
@@ -120,7 +118,7 @@
         </div>
         <div class="field num">
           <label for="numero">Número</label>
-          <input type="text" id="numero" name="numero" inputmode="numeric">
+          <input type="text" id="numero" name="numero" maxlength="10" placeholder="Nº ou S/N">
         </div>
       </div>
       <div class="field">
@@ -196,6 +194,7 @@
 
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyh5S9lgm0Ld4K5j2VU7kDW8OJHp420hCXcUmXZ3igngSwcYTCmkJe7F6eDVaAvpfH-/exec";
+  const IDADE_MINIMA = 16;
 
   // MAIÚSCULAS nos campos de texto (menos o e-mail)
   document.querySelectorAll('input[type=text], input[type=tel]').forEach(function(el){
@@ -215,13 +214,55 @@
     });
   })();
 
-  // Máscara CPF
+  function cpfValido(cpf){
+    cpf=cpf.replace(/\D/g,"");
+    if(cpf.length!==11) return false;
+    if(/^(\d)\1{10}$/.test(cpf)) return false;
+    let s=0; for(let i=0;i<9;i++) s+=parseInt(cpf[i])*(10-i);
+    let d1=(s*10)%11; if(d1===10)d1=0; if(d1!==parseInt(cpf[9])) return false;
+    s=0; for(let i=0;i<10;i++) s+=parseInt(cpf[i])*(11-i);
+    let d2=(s*10)%11; if(d2===10)d2=0; return d2===parseInt(cpf[10]);
+  }
+  function idadeAnos(dstr){
+    var p=dstr.split("-"); if(p.length!==3) return null;
+    var y=+p[0],m=+p[1],d=+p[2]; var h=new Date();
+    var a=h.getFullYear()-y;
+    if(h.getMonth()+1<m || (h.getMonth()+1===m && h.getDate()<d)) a--;
+    return a;
+  }
+  function mostrarErro(id,mostrar,msg){
+    const em=document.getElementById("err-"+id);
+    if(msg && em) em.textContent=msg;
+    if(em) em.classList.toggle("show",mostrar);
+    const el=document.getElementById(id);
+    if(el) el.classList.toggle("invalid",mostrar);
+  }
+
+  // Máscara CPF + verificação de duplicidade ao digitar
   const cpfInput=document.getElementById("cpf");
+  const cpfHint=document.getElementById("cpf-hint");
+  let cpfDuplicado=false;
   cpfInput.addEventListener("input",()=>{
     let v=cpfInput.value.replace(/\D/g,"").slice(0,11);
     v=v.replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d{1,2})$/,"$1-$2");
     cpfInput.value=v;
+    cpfDuplicado=false;
+    const dig=v.replace(/\D/g,"");
+    if(dig.length===11 && cpfValido(v)){ mostrarErro("cpf",false); verificarCpf(dig); }
+    else { cpfHint.style.display="none"; }
   });
+  async function verificarCpf(dig){
+    cpfHint.style.display="block";
+    try{
+      const r=await fetch(SCRIPT_URL+"?cpf="+dig);
+      const d=await r.json();
+      cpfHint.style.display="none";
+      if(d && d.existe){
+        cpfDuplicado=true;
+        mostrarErro("cpf",true,"Este CPF já está inscrito. Só é permitida uma inscrição por CPF.");
+      }
+    }catch(_){ cpfHint.style.display="none"; }
+  }
 
   // Máscara + busca de CEP (ViaCEP)
   const cepInput=document.getElementById("cep");
@@ -249,32 +290,19 @@
     }
   }
 
-  function cpfValido(cpf){
-    cpf=cpf.replace(/\D/g,"");
-    if(cpf.length!==11) return false;
-    if(/^(\d)\1{10}$/.test(cpf)) return false;
-    let s=0; for(let i=0;i<9;i++) s+=parseInt(cpf[i])*(10-i);
-    let d1=(s*10)%11; if(d1===10)d1=0; if(d1!==parseInt(cpf[9])) return false;
-    s=0; for(let i=0;i<10;i++) s+=parseInt(cpf[i])*(11-i);
-    let d2=(s*10)%11; if(d2===10)d2=0; return d2===parseInt(cpf[10]);
-  }
-  function mostrarErro(id,mostrar,msg){
-    const em=document.getElementById("err-"+id);
-    if(msg) em.textContent=msg;
-    em.classList.toggle("show",mostrar);
-    const el=document.getElementById(id);
-    if(el) el.classList.toggle("invalid",mostrar);
-  }
-
   const form=document.getElementById("form");
   form.addEventListener("submit", async (e)=>{
     e.preventDefault();
     let ok=true;
     const nome=document.getElementById("nome");
     if(!nome.value.trim()||nome.value.trim().split(" ").filter(Boolean).length<2){mostrarErro("nome",true,"Informe seu nome completo.");ok=false;}else mostrarErro("nome",false);
-    if(!cpfValido(cpfInput.value)){mostrarErro("cpf",true,"CPF inválido. Confira os números.");ok=false;}else mostrarErro("cpf",false);
+    if(!cpfValido(cpfInput.value)){mostrarErro("cpf",true,"CPF inválido. Confira os números.");ok=false;}
+    else if(cpfDuplicado){mostrarErro("cpf",true,"Este CPF já está inscrito. Só é permitida uma inscrição por CPF.");ok=false;}
+    else mostrarErro("cpf",false);
     const nasc=document.getElementById("nascimento");
-    if(!nasc.value){mostrarErro("nascimento",true);ok=false;}else mostrarErro("nascimento",false);
+    if(!nasc.value){mostrarErro("nascimento",true,"Informe a data de nascimento.");ok=false;}
+    else if(idadeAnos(nasc.value)!==null && idadeAnos(nasc.value)<IDADE_MINIMA){mostrarErro("nascimento",true,"É necessário ter 16 anos ou mais para se inscrever.");ok=false;}
+    else mostrarErro("nascimento",false);
     const sexoSel=document.querySelector('input[name=sexo]:checked');
     if(!sexoSel){mostrarErro("sexo",true);ok=false;}else mostrarErro("sexo",false);
     if(cepInput.value.replace(/\D/g,"").length!==8){mostrarErro("cep",true);ok=false;}else mostrarErro("cep",false);
@@ -292,7 +320,7 @@
     btn.disabled=true; btn.textContent="Enviando...";
     const dados={
       nome:nome.value.trim(), cpf:cpfInput.value, nascimento:nasc.value,
-      sexo:(document.querySelector('input[name=sexo]:checked')||{}).value||"",
+      sexo:sexoSel.value,
       telefone:document.getElementById("telefone").value.trim(),
       email:document.getElementById("email").value.trim(),
       cep:cepInput.value, rua:document.getElementById("rua").value.trim(),
@@ -306,7 +334,7 @@
       const resp=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(dados)});
       const json=await resp.json();
       if(json.resultado==="duplicado"){
-        mostrarErro("cpf",true,"Este CPF já foi inscrito anteriormente.");
+        mostrarErro("cpf",true,"Este CPF já está inscrito. Só é permitida uma inscrição por CPF.");
         document.getElementById("cpf").scrollIntoView({behavior:"smooth",block:"center"});
         btn.disabled=false; btn.textContent="Confirmar inscrição"; return;
       }

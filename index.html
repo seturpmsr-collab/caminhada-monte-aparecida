@@ -248,6 +248,19 @@
   const cpfInput=document.getElementById("cpf");
   const cpfHint=document.getElementById("cpf-hint");
   let cpfDuplicado=false;
+  // Lê dados do Apps Script por JSONP (não sofre bloqueio de CORS)
+  function jsonp(url){
+    return new Promise(function(resolve,reject){
+      var cb="cb_"+Date.now()+"_"+Math.floor(Math.random()*1e6);
+      var s=document.createElement("script");
+      var timer=setTimeout(function(){cleanup();reject(new Error("timeout"));},12000);
+      function cleanup(){clearTimeout(timer);try{delete window[cb];}catch(_){}if(s.parentNode)s.parentNode.removeChild(s);}
+      window[cb]=function(data){cleanup();resolve(data);};
+      s.onerror=function(){cleanup();reject(new Error("jsonp"));};
+      s.src=url+(url.indexOf("?")>=0?"&":"?")+"callback="+cb;
+      document.body.appendChild(s);
+    });
+  }
   cpfInput.addEventListener("input",()=>{
     let v=cpfInput.value.replace(/\D/g,"").slice(0,11);
     v=v.replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d{1,2})$/,"$1-$2");
@@ -264,8 +277,7 @@
   async function verificarCpf(dig){
     cpfHint.style.display="block";
     try{
-      const r=await fetch(SCRIPT_URL+"?cpf="+dig);
-      const d=await r.json();
+      const d=await jsonp(SCRIPT_URL+"?cpf="+dig);
       cpfHint.style.display="none";
       if(d && d.existe){
         cpfDuplicado=true;
@@ -323,8 +335,7 @@
   // Ao abrir a página, verifica se ainda há vagas
   (async function checarVagas(){
     try{
-      var r=await fetch(SCRIPT_URL+"?status=1");
-      var d=await r.json();
+      var d=await jsonp(SCRIPT_URL+"?status=1");
       if(d && d.lotado) mostrarEsgotado();
     }catch(_){}
   })();
@@ -370,15 +381,19 @@
       dataInscricao:new Date().toLocaleString("pt-BR")
     };
     try{
-      const resp=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(dados)});
-      const json=await resp.json();
-      if(json.resultado==="lotado"){ mostrarEsgotado(); return; }
-      if(json.resultado==="duplicado"){
-        mostrarErro("cpf",true,"Este CPF já está inscrito. Só é permitida uma inscrição por CPF.");
-        document.getElementById("cpf").scrollIntoView({behavior:"smooth",block:"center"});
-        btn.disabled=false; btn.textContent="Confirmar inscrição"; return;
-      }
-      if(json.resultado!=="ok") throw new Error("resposta inesperada");
+      // Checagem final confiável (JSONP não é bloqueado por CORS)
+      try{
+        const st=await jsonp(SCRIPT_URL+"?status=1");
+        if(st && st.lotado){ mostrarEsgotado(); return; }
+        const chk=await jsonp(SCRIPT_URL+"?cpf="+dados.cpf.replace(/\D/g,""));
+        if(chk && chk.existe){
+          mostrarErro("cpf",true,"Este CPF já está inscrito. Só é permitida uma inscrição por CPF.");
+          document.getElementById("cpf").scrollIntoView({behavior:"smooth",block:"center"});
+          btn.disabled=false; btn.textContent="Confirmar inscrição"; return;
+        }
+      }catch(_){ /* se a checagem falhar, segue com o envio */ }
+      // Envia sem ler a resposta (evita o erro de CORS). O servidor garante duplicado e limite.
+      await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",body:JSON.stringify(dados)});
       form.style.display="none";
       document.getElementById("ok").style.display="block";
       window.scrollTo({top:0,behavior:"smooth"});
